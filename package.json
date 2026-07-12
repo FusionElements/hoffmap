@@ -1,0 +1,17 @@
+{
+  "name": "hoff-map",
+  "version": "1.0.0",
+  "description": "ハドフ巡りマップ（埼玉県）",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "fetch-stores": "node scripts/fetch-stores.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  }
+}

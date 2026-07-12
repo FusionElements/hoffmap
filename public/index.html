@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
+    <title>ハドフ巡りマップ β（全国）</title>
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"
+    />
+    <link rel="stylesheet" href="/css/style.css" />
+  </head>
+  <body>
+    <div id="map" aria-label="ハドフ店舗マップ"></div>
+
+    <div class="hud">
+      <div class="panel title">
+        <h1>
+          ハドフ巡りマップ<small
+            >JAPAN β &nbsp;/&nbsp; 全国 <span id="store-count">—</span>店舗</small
+          >
+          <div class="bar" aria-hidden="true"><i id="bar"></i></div>
+        </h1>
+        <div class="tag" id="tag" role="status">
+          <span class="lbl">めぐり達成</span>
+          <span class="num"
+            ><b id="done">0</b>/<span id="total">0</span>店</span
+          >
+        </div>
+      </div>
+    </div>
+
+    <button
+      class="locate"
+      id="locate"
+      title="現在地へ移動"
+      aria-label="現在地へ移動"
+    >
+      📍
+    </button>
+
+    <div class="filters">
+      <label class="pref-select" for="prefecture">
+        <span>都道府県</span>
+        <select id="prefecture" aria-label="都道府県で絞り込み">
+          <option value="all">すべて</option>
+        </select>
+      </label>
+      <div class="chips" id="chips" role="group" aria-label="表示フィルタ"></div>
+    </div>
+    <div class="toast" id="toast" role="status"></div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+    <script src="/js/app.js" type="module"></script>
+  </body>
+</html>
