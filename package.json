@@ -1,10 +1,14 @@
 {
   "name": "hoff-map",
   "version": "1.0.0",
-  "description": "ハドフ巡りマップ（埼玉県）",
+  "description": "ハドフ巡りマップ（全国）",
   "main": "server.js",
   "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "watch": "tsc -p tsconfig.json --watch",
+    "prestart": "npm run build",
     "start": "node server.js",
+    "predev": "npm run build",
     "dev": "node --watch server.js",
     "fetch-stores": "node scripts/fetch-stores.js"
   },
@@ -13,5 +17,9 @@
   },
   "dependencies": {
     "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "@types/leaflet": "^1.9.21",
+    "typescript": "^7.0.2"
   }
 }
