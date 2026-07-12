@@ -1,59 +1,316 @@
 <!DOCTYPE html>
 <html lang="ja">
-  <head>
-    <meta charset="UTF-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
-    />
-    <title>ハドフ巡りマップ β（全国）</title>
-    <link
-      rel="stylesheet"
-      href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"
-    />
-    <link rel="stylesheet" href="/css/style.css" />
-  </head>
-  <body>
-    <div id="map" aria-label="ハドフ店舗マップ"></div>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>ハドフ巡りマップ β（全国）</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+  :root{
+    --blue:#1355A4;      /* 看板ブルー：未訪問ピン */
+    --blue-deep:#0C3E7C;
+    --red:#D7263D;       /* チェックイン済み */
+    --red-deep:#A81528;
+    --tag:#FFC53D;       /* ジャンク値札イエロー */
+    --ink:#17233B;
+    --paper:#FFFFFF;
+    --line:#DCE3EE;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:"Hiragino Kaku Gothic ProN","Hiragino Sans","Yu Gothic UI","Noto Sans JP",system-ui,sans-serif;
+    color:var(--ink);
+  }
+  #map{position:fixed;inset:0;z-index:0}
 
-    <div class="hud">
-      <div class="panel title">
-        <h1>
-          ハドフ巡りマップ<small
-            >JAPAN β &nbsp;/&nbsp; 全国 <span id="store-count">—</span>店舗</small
-          >
-          <div class="bar" aria-hidden="true"><i id="bar"></i></div>
-        </h1>
-        <div class="tag" id="tag" role="status">
-          <span class="lbl">めぐり達成</span>
-          <span class="num"
-            ><b id="done">0</b>/<span id="total">0</span>店</span
-          >
-        </div>
+  /* ── ヘッダーカード ───────────────────────── */
+  .hud{
+    position:fixed;top:12px;left:12px;right:12px;z-index:1000;
+    display:flex;align-items:flex-start;gap:10px;pointer-events:none;
+  }
+  .panel{
+    pointer-events:auto;
+    background:var(--paper);border:1.5px solid var(--line);border-radius:14px;
+    box-shadow:0 6px 20px rgba(12,32,68,.16);
+    padding:10px 14px;
+  }
+  .title-row{
+    display:flex;align-items:center;gap:10px;
+  }
+  .pref-select{
+    display:block;width:100%;margin-top:8px;
+    border:1.5px solid var(--line);border-radius:8px;background:var(--paper);
+    color:var(--ink);font-size:12.5px;font-weight:700;padding:6px 8px;
+  }
+  .title h1{
+    font-size:17px;font-weight:800;letter-spacing:.02em;line-height:1.2;
+    color:var(--blue-deep);
+  }
+  .title h1 small{
+    display:block;font-size:10.5px;font-weight:600;color:#5B6B85;letter-spacing:.08em;
+  }
+  /* ジャンク値札風の進捗タグ（signature） */
+  .tag{
+    position:relative;background:var(--tag);border-radius:4px 10px 10px 4px;
+    padding:6px 12px 6px 16px;font-weight:800;line-height:1.1;
+    box-shadow:0 3px 8px rgba(120,80,0,.25);transform:rotate(-2deg);
+    white-space:nowrap;
+  }
+  .tag::before{ /* 値札の穴 */
+    content:"";position:absolute;left:5px;top:50%;transform:translateY(-50%);
+    width:6px;height:6px;border-radius:50%;background:var(--paper);
+    box-shadow:inset 0 0 0 1.5px rgba(120,80,0,.5);
+  }
+  .tag .num{font-size:18px;letter-spacing:.02em}
+  .tag .lbl{display:block;font-size:9.5px;letter-spacing:.14em;color:#6B4E00}
+  .bar{
+    height:5px;border-radius:3px;background:#EDF1F7;margin-top:7px;overflow:hidden;
+  }
+  .bar i{display:block;height:100%;background:linear-gradient(90deg,var(--red),#F0596E);width:0%;transition:width .4s}
+
+  /* ── フィルタチップ ───────────────────────── */
+  .chips{
+    position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom));z-index:1000;
+    display:flex;gap:7px;flex-wrap:nowrap;overflow-x:auto;padding-bottom:2px;
+    -webkit-overflow-scrolling:touch;scrollbar-width:none;
+  }
+  .chips::-webkit-scrollbar{display:none}
+  .chip{
+    flex:0 0 auto;border:1.5px solid var(--line);background:var(--paper);color:var(--ink);
+    border-radius:999px;padding:7px 13px;font-size:12.5px;font-weight:700;cursor:pointer;
+    box-shadow:0 3px 10px rgba(12,32,68,.14);
+  }
+  .chip.on{background:var(--blue);border-color:var(--blue);color:#fff}
+  .chip.on.warn{background:var(--red);border-color:var(--red)}
+  .chip:focus-visible{outline:3px solid var(--tag);outline-offset:1px}
+
+  /* ── 一覧ボタン ──────────────────────────── */
+  .list-btn{
+    position:fixed;right:12px;bottom:calc(118px + env(safe-area-inset-bottom));z-index:1000;
+    width:44px;height:44px;border-radius:50%;border:1.5px solid var(--line);
+    background:var(--paper);cursor:pointer;font-size:19px;
+    box-shadow:0 4px 12px rgba(12,32,68,.2);
+  }
+  .list-btn:focus-visible{outline:3px solid var(--tag)}
+
+  /* ── 現在地ボタン ─────────────────────────── */
+  .locate{
+    position:fixed;right:12px;bottom:calc(64px + env(safe-area-inset-bottom));z-index:1000;
+    width:44px;height:44px;border-radius:50%;border:1.5px solid var(--line);
+    background:var(--paper);cursor:pointer;font-size:19px;
+    box-shadow:0 4px 12px rgba(12,32,68,.2);transition:background .2s,border-color .2s;
+  }
+  .locate.on{background:var(--blue);border-color:var(--blue-deep);}
+  .locate:focus-visible{outline:3px solid var(--tag)}
+
+  /* ── ピン ─────────────────────────────────── */
+  .pin{
+    position:relative;
+    width:30px;height:30px;border-radius:50% 50% 50% 4px;transform:rotate(-45deg);
+    background:var(--blue);border:2.5px solid #fff;
+    box-shadow:0 3px 7px rgba(10,25,60,.4);
+    display:flex;align-items:center;justify-content:center;
+  }
+  .pin span{
+    transform:rotate(45deg);color:#fff;font-weight:800;font-size:12.5px;
+    font-family:"Arial Black","Hiragino Kaku Gothic ProN",sans-serif;
+  }
+  .pin.done{background:#fff}
+  .leaflet-div-icon{background:transparent;border:none}
+
+  /* ── ポップアップ ─────────────────────────── */
+  .leaflet-popup-content{margin:14px 16px;min-width:225px}
+  .pop .brand{
+    display:inline-block;font-size:10px;font-weight:800;letter-spacing:.1em;
+    color:#fff;background:var(--blue);border-radius:4px;padding:2px 7px;margin-bottom:5px;
+  }
+  .pop.done .brand{background:var(--red)}
+  .pop h2{font-size:15px;font-weight:800;line-height:1.35;margin-bottom:5px}
+  .pop .addr{font-size:12px;color:#44536E;line-height:1.5}
+  .pop .date{font-size:11.5px;color:var(--red);font-weight:700;margin-top:6px}
+  .pop .links{margin-top:8px;font-size:12px;display:flex;gap:12px}
+  .pop .links a{color:var(--blue);font-weight:700;text-decoration:none}
+  .pop button{
+    width:100%;margin-top:10px;border:none;border-radius:9px;padding:10px 0;
+    font-size:14px;font-weight:800;cursor:pointer;color:#fff;background:var(--blue);
+  }
+  .pop.done button{background:#fff;color:var(--red);border:2px solid var(--red)}
+  .pop .note{font-size:10px;color:#8A97AC;margin-top:7px;line-height:1.5}
+
+  /* ── ここへ行くボタン群 ──────────────────── */
+  .pop .nav-btns{display:flex;gap:6px;margin-top:10px;}
+  .pop .nav-btn{
+    flex:1;text-align:center;border-radius:8px;padding:8px 2px;
+    font-size:11.5px;font-weight:800;text-decoration:none;border:1.5px solid;line-height:1.2;
+  }
+  .pop .nav-btn.google{color:#1a73e8;border-color:#1a73e8;}
+  .pop .nav-btn.apple{color:#1c1c1e;border-color:#1c1c1e;}
+  .pop .nav-btn.yahoo{color:#e61c24;border-color:#e61c24;}
+  .pop .nav-label{
+    font-size:11px;color:#5B6B85;font-weight:700;
+    display:block;margin-bottom:4px;
+  }
+
+  /* ── 店舗一覧シート ─────────────────────── */
+  .list-sheet{
+    position:fixed;inset:0;z-index:3000;
+    display:flex;flex-direction:column;background:var(--paper);
+    transform:translateY(100%);transition:transform .3s cubic-bezier(.32,0,.67,1);
+  }
+  .list-sheet.open{transform:translateY(0)}
+  @media (prefers-reduced-motion: reduce){ .list-sheet{transition:none} }
+
+  .list-header{
+    display:flex;align-items:center;justify-content:space-between;gap:10px;
+    padding:16px 16px 0;flex-shrink:0;
+    padding-top:calc(16px + env(safe-area-inset-top));
+  }
+  .list-header-left{display:flex;align-items:baseline;gap:8px}
+  .list-header h2{font-size:18px;font-weight:800;color:var(--blue-deep)}
+  .list-header-count{font-size:13px;color:#5B6B85;font-weight:600}
+  .list-close{
+    width:34px;height:34px;border-radius:50%;border:1.5px solid var(--line);
+    background:transparent;cursor:pointer;font-size:16px;color:#5B6B85;
+    display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  }
+  .list-close:focus-visible{outline:3px solid var(--tag)}
+
+  .list-tabs{
+    display:flex;gap:6px;padding:12px 16px 10px;flex-shrink:0;
+    border-bottom:1.5px solid var(--line);
+  }
+  .list-tab{
+    border:1.5px solid var(--line);background:var(--paper);color:var(--ink);
+    border-radius:999px;padding:5px 14px;font-size:12.5px;font-weight:700;cursor:pointer;
+  }
+  .list-tab.on{background:var(--blue);border-color:var(--blue);color:#fff}
+  .list-tab.on.warn{background:var(--red);border-color:var(--red)}
+
+  .list-jump{
+    display:flex;gap:6px;overflow-x:auto;padding:10px 16px;-webkit-overflow-scrolling:touch;
+    scrollbar-width:none;border-bottom:1.5px solid var(--line);flex-shrink:0;
+  }
+  .list-jump::-webkit-scrollbar{display:none}
+  .list-jump button{
+    flex:0 0 auto;border:1.5px solid var(--line);border-radius:999px;padding:5px 12px;
+    font:inherit;font-size:12px;font-weight:700;color:var(--ink);background:var(--bg,#F4F6FA);cursor:pointer;
+  }
+
+  .list-body{
+    flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;
+    padding:12px 16px calc(16px + env(safe-area-inset-bottom));
+  }
+  .list-pref-section{
+    border:1.5px solid var(--line);border-radius:12px;margin-bottom:10px;overflow:hidden;
+    scroll-margin-top:130px;
+  }
+  .list-pref-h3{
+    display:flex;align-items:center;gap:10px;padding:11px 12px;
+  }
+  .list-pref-h3 input[type=checkbox]{
+    width:22px;height:22px;flex:0 0 auto;accent-color:#0F9D58;cursor:pointer;
+  }
+  .pref-toggle{
+    flex:1;display:flex;align-items:baseline;gap:8px;min-width:0;
+    background:none;border:none;font:inherit;text-align:left;cursor:pointer;padding:0;
+  }
+  .pref-toggle .pref-name{font-size:14px;font-weight:800;color:var(--blue-deep)}
+  .pref-toggle .n{font-size:11px;color:#5B6B85;font-weight:600}
+  .pref-toggle .chev{margin-left:auto;color:#8A97AC;font-size:12px}
+  .list-pref-body{padding:0 12px 12px}
+
+  .list-card{
+    display:flex;gap:10px;border:1.5px solid var(--line);border-radius:12px;
+    padding:12px 14px;margin-bottom:10px;-webkit-tap-highlight-color:transparent;
+  }
+  .list-card.done{border-color:#0F9D58;background:#F3FBF6}
+  .list-card input[type=checkbox]{
+    width:22px;height:22px;flex:0 0 auto;margin-top:2px;accent-color:#0F9D58;cursor:pointer;
+  }
+  .list-card-body{flex:1;min-width:0}
+  .list-card .item-brand{
+    display:inline-block;font-size:10px;font-weight:800;letter-spacing:.08em;
+    color:#fff;border-radius:4px;padding:2px 7px;margin-bottom:5px;
+  }
+  .list-card .item-name{font-size:14.5px;font-weight:800;line-height:1.35}
+  .list-card .item-addr{font-size:12px;color:#44536E;margin-top:3px;line-height:1.5}
+  .list-card .item-date{font-size:11.5px;color:#0F9D58;font-weight:700;margin-top:5px}
+  .list-card .item-links{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
+  .list-card .item-links a, .list-card .item-links button{
+    font:inherit;font-size:11px;font-weight:700;text-decoration:none;color:var(--blue);
+    border:1.5px solid var(--line);border-radius:999px;padding:5px 10px;white-space:nowrap;
+    background:var(--paper);cursor:pointer;
+  }
+  .list-card .item-links button.on-map{color:#fff;background:var(--blue);border-color:var(--blue)}
+  .list-empty{
+    padding:48px 24px;text-align:center;color:#8A97AC;font-size:14px;font-weight:600;
+  }
+
+  /* ── トースト ─────────────────────────────── */
+  .toast{
+    position:fixed;left:50%;bottom:calc(70px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(20px);
+    z-index:2000;background:var(--ink);color:#fff;font-size:13px;font-weight:700;
+    border-radius:10px;padding:10px 18px;opacity:0;transition:.25s;pointer-events:none;
+    max-width:90vw;text-align:center;
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+  @media (prefers-reduced-motion: reduce){
+    .bar i,.toast{transition:none}
+  }
+  @media (max-width:430px){
+    .title h1{font-size:15px}
+    .tag .num{font-size:16px}
+  }
+</style>
+</head>
+<body>
+<div id="map" aria-label="ハドフ店舗マップ"></div>
+
+<div class="hud">
+  <div class="panel title">
+    <div class="title-row">
+      <h1>ハドフ巡りマップ<small>JAPAN β &nbsp;/&nbsp; <span id="pref-label">全国</span> <span id="store-count">0</span>店舗</small>
+        <div class="bar" aria-hidden="true"><i id="bar"></i></div>
+      </h1>
+      <div class="tag" id="tag" role="status">
+        <span class="lbl">めぐり達成</span>
+        <span class="num"><b id="done">0</b>/<span id="total">0</span>店</span>
       </div>
     </div>
+    <select id="pref-select" class="pref-select" aria-label="都道府県で絞り込み">
+      <option value="all">全都道府県</option>
+    </select>
+  </div>
+</div>
 
-    <button
-      class="locate"
-      id="locate"
-      title="現在地へ移動"
-      aria-label="現在地へ移動"
-    >
-      📍
-    </button>
+<button class="list-btn" id="list-btn" title="店舗一覧" aria-label="店舗一覧">≡</button>
+<button class="locate" id="locate" title="現在地へ移動" aria-label="現在地へ移動">📍</button>
 
-    <div class="filters">
-      <label class="pref-select" for="prefecture">
-        <span>都道府県</span>
-        <select id="prefecture" aria-label="都道府県で絞り込み">
-          <option value="all">すべて</option>
-        </select>
-      </label>
-      <div class="chips" id="chips" role="group" aria-label="表示フィルタ"></div>
+<div class="chips" id="chips" role="group" aria-label="表示フィルタ"></div>
+<div class="toast" id="toast" role="status"></div>
+
+<div class="list-sheet" id="list-sheet" role="dialog" aria-modal="true" aria-label="店舗一覧">
+  <div class="list-header">
+    <div class="list-header-left">
+      <h2>店舗一覧</h2>
+      <span class="list-header-count" id="list-count"></span>
     </div>
-    <div class="toast" id="toast" role="status"></div>
+    <button class="list-close" id="list-close" aria-label="閉じる">✕</button>
+  </div>
+  <div class="list-tabs" id="list-tabs">
+    <button class="list-tab on" data-filter="all">すべて</button>
+    <button class="list-tab" data-filter="unvisited">未訪問</button>
+    <button class="list-tab warn" data-filter="visited">チェック済み</button>
+  </div>
+  <div class="list-jump" id="list-jump" aria-label="都道府県ジャンプ"></div>
+  <div class="list-body" id="list-body"></div>
+</div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-    <script src="/js/app.js" type="module"></script>
-  </body>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="js/stores.js"></script>
+<script src="js/checkins.js"></script>
+<script src="js/app.js"></script>
+</body>
 </html>
